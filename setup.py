@@ -4,8 +4,8 @@ with open("README.md", "r") as fh:
     long_description = fh.read()
 
 setuptools.setup(
-    name="deep_geometry",
-    version="0.0.2",
+    name="deep-geometry",
+    version="0.1.0",
     author="Rein van 't Veer",
     author_email="rein@geodan.nl",
     description="A python library for preprocessing geospatial vector geometries for use in deep learning",
