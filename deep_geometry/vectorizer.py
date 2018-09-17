@@ -67,7 +67,7 @@ def num_points_from_wkt(wkt):
     return number_of_points
 
 
-def vectorize_wkt(wkt, max_points, simplify=False, fixed_size=False):
+def vectorize_wkt(wkt, max_points=None, simplify=False, fixed_size=False):
     """
     Convert wkt geometry to a numpy array of real values. The size of the vector is equal to:
         if fixed_size=False: p where p is the size of the set of points in the geometry;
@@ -81,7 +81,13 @@ def vectorize_wkt(wkt, max_points, simplify=False, fixed_size=False):
     shape = loads(wkt)
     total_points = num_points_from_wkt(shape.wkt)  # use the shapely wkt form for consistency
 
-    if total_points > max_points:
+    if simplify and not max_points:
+        raise ValueError('If you want to reduce the number of points using simplify, please specify the max_points.')
+
+    if fixed_size and not max_points:
+        raise ValueError('If you want to produce fixed sized vectors, please specify the max_points.')
+
+    if max_points and total_points > max_points:
         if not simplify:
             raise ValueError('The number of points in the geometry exceeds the max_points but the reduce_points '
                              'parameter was set to False. Please set the reduce_points parameter to True to reduce '

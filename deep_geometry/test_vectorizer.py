@@ -65,12 +65,10 @@ class TestVectorizer(unittest.TestCase):
         max_pts = max_points(brt_wkt, osm_wkt)
         self.assertEqual(max_pts, 159)
 
-    # def test_interpolate(self):
-    #     interpolated = GeoVectorizer.interpolate(input_geom, len(input_geom) * 2)
-    #     for index, _ in enumerate(interpolated):
-    #         result = list(interpolated[index])
-    #         expected = list(output_geom[index])
-    #         self.assertListEqual(result, expected, msg='Lists differ at index %i' % index)
+    def test_max_points_3d(self):
+        geom_3d = 'POLYGON((0 0 0, 1 1 1, 2 2 2, 0 0 0))'
+        max_pts = max_points([geom_3d])
+        self.assertEqual(max_pts, 4)
 
     def test_vectorize_one_wkt(self):
         max_points = 20
@@ -82,6 +80,11 @@ class TestVectorizer(unittest.TestCase):
         self.assertEqual(vectorized[0].shape, (19, GEO_VECTOR_LEN))
         self.assertEqual(vectorized[1].shape, (1, GEO_VECTOR_LEN))
 
+    def test_no_max_points_fixed_size(self):
+        input_set = np.array(target_wkt)
+        with self.assertRaises(ValueError):
+            vectorized = [vectorize_wkt(wkt, fixed_size=True) for wkt in input_set]
+
     def test_fixed_size(self):
         max_points = 20
         input_set = np.array(target_wkt)
@@ -92,7 +95,11 @@ class TestVectorizer(unittest.TestCase):
         with self.assertRaises(ValueError):
             vectorize_wkt(non_empty_geom_collection, 100)
 
-    def test_point(self):
+    def test_point_without_max_points(self):
+        point_matrix = vectorize_wkt('POINT(12 14)')
+        self.assertEqual(point_matrix.shape, (1, GEO_VECTOR_LEN))
+
+    def test_point_with_max_points(self):
         point_matrix = vectorize_wkt('POINT(12 14)', 5)
         self.assertEqual(point_matrix.shape, (1, GEO_VECTOR_LEN))
 
@@ -115,6 +122,12 @@ class TestVectorizer(unittest.TestCase):
             max_points = 20
             vectorized = vectorize_wkt(wkt, max_points, simplify=True)
             self.assertEqual((20, GEO_VECTOR_LEN), vectorized.shape)
+
+    def test_simplify_without_max_points(self):
+        with open('test_files/multipart_multipolygon_wkt.txt', 'r') as file:
+            wkt = file.read()
+            with self.assertRaises(ValueError):
+                vectorize_wkt(wkt, simplify=True)
 
     def test_multipolygon_exceed_max_points(self):
         with open('test_files/multipart_multipolygon_wkt.txt', 'r') as file:

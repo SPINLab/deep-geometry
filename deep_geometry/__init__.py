@@ -1,1 +1,1 @@
-name = "deep_geometry"
+name = "deep-geometry"
