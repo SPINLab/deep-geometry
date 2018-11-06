@@ -109,6 +109,12 @@ class TestVectorizer(unittest.TestCase):
             vectorize_wkt(
                 'THIS_SHOULD_THROW_AN_EXCEPTION ((10 10, 20 20, 10 40),(40 40, 30 30, 40 20, 30 10))', 16)
 
+    def test_multipolygon(self):
+        with open('test_files/multipolygon.txt', 'r') as file:
+            wkt = file.read()
+            vectorized = vectorize_wkt(wkt)
+            self.assertEqual((333, GEO_VECTOR_LEN), vectorized.shape)
+
     def test_vectorize_big_multipolygon(self):
         with open('test_files/big_multipolygon_wkt.txt', 'r') as file:
             wkt = file.read()

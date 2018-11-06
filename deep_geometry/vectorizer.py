@@ -104,6 +104,8 @@ def vectorize_wkt(wkt, max_points=None, simplify=False, fixed_size=False):
             [vectorize_polygon(geom) for geom in shape.geoms], axis=0)
         geom_matrix[total_points - 1, STOP_INDEX] = 0
         # noinspection PyUnresolvedReferences
+        if not max_points:
+            max_points = total_points
         geom_matrix = np.append(geom_matrix, np.zeros((max_points - total_points, GEO_VECTOR_LEN)), axis=0)
         geom_matrix[total_points - 1:, FULL_STOP_INDEX] = 1  # Manually set full stop bits
     elif shape.geom_type == 'GeometryCollection':
