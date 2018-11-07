@@ -4,7 +4,9 @@ import numpy as np
 from shapely import wkt as wktreader
 from csv import DictReader
 
-from deep_geometry.vectorizer import vectorize_wkt, GEO_VECTOR_LEN, max_points
+from deep_geometry.vectorizer \
+    import num_points_from_wkt, vectorize_wkt, max_points, \
+    GEO_VECTOR_LEN, IS_INNER_INDEX, IS_OUTER_INDEX, FULL_STOP_INDEX
 
 TOPOLOGY_CSV = 'test_files/polygon_multipolygon.csv'
 
@@ -61,6 +63,12 @@ non_empty_geom_collection = 'GEOMETRYCOLLECTION(LINESTRING(1 1, 3 5),POLYGON((-1
 
 
 class TestVectorizer(unittest.TestCase):
+    def test_num_points_from_multipolygon_with_hole(self):
+        with open('test_files/multipolygon_with_hole.txt', 'r') as file:
+            wkt = file.read()
+            total_points = num_points_from_wkt(wkt)
+            self.assertEqual(total_points, 683)
+
     def test_max_points(self):
         max_pts = max_points(brt_wkt, osm_wkt)
         self.assertEqual(max_pts, 159)
@@ -90,18 +98,22 @@ class TestVectorizer(unittest.TestCase):
         input_set = np.array(target_wkt)
         vectorized = [vectorize_wkt(wkt, max_points, simplify=True, fixed_size=True) for wkt in input_set]
         self.assertEqual(np.array(vectorized).shape, (input_set.size, 20, GEO_VECTOR_LEN))
+        for vector in vectorized:
+            self.assertEqual(vector[-1, FULL_STOP_INDEX], 1)
 
     def test_non_empty_geom_coll(self):
         with self.assertRaises(ValueError):
             vectorize_wkt(non_empty_geom_collection, 100)
 
     def test_point_without_max_points(self):
-        point_matrix = vectorize_wkt('POINT(12 14)')
-        self.assertEqual(point_matrix.shape, (1, GEO_VECTOR_LEN))
+        vectorized = vectorize_wkt('POINT(12 14)')
+        self.assertEqual(vectorized.shape, (1, GEO_VECTOR_LEN))
+        self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)  # Test full stop bit
 
     def test_point_with_max_points(self):
-        point_matrix = vectorize_wkt('POINT(12 14)', 5)
-        self.assertEqual(point_matrix.shape, (1, GEO_VECTOR_LEN))
+        vectorized = vectorize_wkt('POINT(12 14)', 5)
+        self.assertEqual(vectorized.shape, (1, GEO_VECTOR_LEN))
+        self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)  # Test full stop bit
 
     def test_unsupported_geom(self):
         # Since
@@ -114,6 +126,23 @@ class TestVectorizer(unittest.TestCase):
             wkt = file.read()
             vectorized = vectorize_wkt(wkt)
             self.assertEqual((333, GEO_VECTOR_LEN), vectorized.shape)
+            self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)  # Test full stop bit
+
+    def test_polygon_with_hole(self):
+        polygon_with_hole = "POLYGON((0 0, 3 0, 3 3, 0 3, 0 0), (1 1, 2 1, 2 2, 1 2, 1 1))"
+        vectorized = vectorize_wkt(polygon_with_hole)
+        for is_inner_bit in vectorized[:5, IS_INNER_INDEX]:
+            self.assertEqual(is_inner_bit, 1)
+        for is_outer_bit in vectorized[5:, IS_OUTER_INDEX]:
+            self.assertEqual(is_outer_bit, 1)
+        self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)
+
+    def test_multipolygon_with_hole(self):
+        with open('test_files/multipolygon_with_hole.txt', 'r') as file:
+            wkt = file.read()
+            vectorized = vectorize_wkt(wkt)
+            self.assertEqual((683, GEO_VECTOR_LEN), vectorized.shape)
+            self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)  # Test full stop bit
 
     def test_vectorize_big_multipolygon(self):
         with open('test_files/big_multipolygon_wkt.txt', 'r') as file:
@@ -121,6 +150,7 @@ class TestVectorizer(unittest.TestCase):
             max_pts = max_points([wkt])
             vectorized = vectorize_wkt(wkt, max_pts)
             self.assertEqual((144, GEO_VECTOR_LEN), vectorized.shape)
+            self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)  # Test full stop bit
 
     def test_simplify_multipolygon_gt_max_points(self):
         with open('test_files/multipart_multipolygon_wkt.txt', 'r') as file:
@@ -128,6 +158,7 @@ class TestVectorizer(unittest.TestCase):
             max_points = 20
             vectorized = vectorize_wkt(wkt, max_points, simplify=True)
             self.assertEqual((20, GEO_VECTOR_LEN), vectorized.shape)
+            self.assertEqual(vectorized[-1, FULL_STOP_INDEX], 1)  # Test full stop bit
 
     def test_simplify_without_max_points(self):
         with open('test_files/multipart_multipolygon_wkt.txt', 'r') as file:
