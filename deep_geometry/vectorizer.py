@@ -9,8 +9,11 @@ GEOMETRY_TYPES = ["GeometryCollection", "Point", "LineString", "Polygon", "Multi
                   "MultiPolygon", "Geometry"]
 X_INDEX = 0  # the X coordinate position
 Y_INDEX = 1  # the Y coordinate position
-RENDER_INDEX = Y_INDEX + 1  # Render index start
+IS_INNER_INDEX = Y_INDEX + 1  # Render index start
+IS_OUTER_INDEX = IS_INNER_INDEX + 1
+IS_INNER_LEN = 2  # One-hot vector indicating a hole (inner ring) or boundary (outer) ring in a geometry
 RENDER_LEN = 3  # Render one-hot vector length
+RENDER_INDEX = IS_OUTER_INDEX + 1
 ONE_HOT_LEN = 2 + RENDER_LEN  # Length of the one-hot encoded part
 STOP_INDEX = RENDER_INDEX + 1  # Stop index for the first geometry. A second one follows
 FULL_STOP_INDEX = STOP_INDEX + 1  # Full stop index. No more points to follow
@@ -96,44 +99,58 @@ def vectorize_wkt(wkt, max_points=None, simplify=False, fixed_size=False):
             shape = recursive_simplify(max_points, shape)
             total_points = num_points_from_wkt(shape.wkt)
 
+    if not max_points:
+        max_points = total_points
+
     if shape.geom_type == 'Polygon':
-        geom_matrix = vectorize_polygon(shape)
+        geom_matrix = vectorize_polygon(shape, is_last=True)
+
     elif shape.geom_type == 'MultiPolygon':
         # noinspection PyUnresolvedReferences
         geom_matrix = np.concatenate(
             [vectorize_polygon(geom) for geom in shape.geoms], axis=0)
         geom_matrix[total_points - 1, STOP_INDEX] = 0
         # noinspection PyUnresolvedReferences
-        if not max_points:
-            max_points = total_points
         geom_matrix = np.append(geom_matrix, np.zeros((max_points - total_points, GEO_VECTOR_LEN)), axis=0)
+        geom_matrix[:total_points - 1, FULL_STOP_INDEX] = 0  # Manually set full stop bits
         geom_matrix[total_points - 1:, FULL_STOP_INDEX] = 1  # Manually set full stop bits
+
     elif shape.geom_type == 'GeometryCollection':
         if len(shape.geoms) > 0:  # not GEOMETRYCOLLECTION EMPTY
             raise ValueError("Don't know how to process non-empty GeometryCollection type")
         # noinspection PyUnresolvedReferences
         geom_matrix = np.zeros((1, GEO_VECTOR_LEN))
         geom_matrix[:, FULL_STOP_INDEX] = 1  # Manually set full stop bits
+
     elif shape.geom_type == 'Point':
         geom_matrix = vectorize_points(shape.coords, is_last=True)
+
     else:
         raise ValueError("Don't know how to get the number of points from geometry type {}".format(shape.geom_type))
 
     if fixed_size:
-        pad_shape = ((0, max_points - len(geom_matrix)), (0, 0))
+        pad_len = max_points - len(geom_matrix)
+        pad_shape = ((0, pad_len), (0, 0))
         geom_matrix = np.pad(geom_matrix, pad_shape, mode='constant')
+        geom_matrix[:max_points, FULL_STOP_INDEX] = 1
     return geom_matrix
 
 
-def vectorize_polygon(shape):
-    return vectorize_points(shape.exterior.coords, is_last=True)
+def vectorize_polygon(shape, is_last=False):
+    if len(shape.interiors):
+        vectorized = [vectorize_points(interior.coords, is_inner=True) for interior in shape.interiors]
+        vectorized = np.concatenate(vectorized)
+        vectorized = np.concatenate([vectorized, vectorize_points(shape.exterior.coords, is_last=is_last)])
+    else:
+        vectorized = vectorize_points(shape.exterior.coords, is_last=is_last)
+    return vectorized
 
 
-def vectorize_points(points, is_last=False):
+def vectorize_points(points, is_last=False, is_inner=False):
     """
     Fill an array of vectors out of an array of points from a geometry
     :param points: the array of input points
-    :param is_last: extra offset for the last point in a geometry, to indicate a full stop.
+    :param is_last: for the last point in a geometry, to indicate a full stop.
     :return matrix: a matrix representation of the points.
     """
     # noinspection PyUnresolvedReferences
@@ -142,6 +159,10 @@ def vectorize_points(points, is_last=False):
     for point_index, point in enumerate(points):
         matrix[point_index, X_INDEX] = point[0]
         matrix[point_index, Y_INDEX] = point[1]
+        if is_inner:
+            matrix[point_index, IS_INNER_INDEX] = 1
+        else:
+            matrix[point_index, IS_OUTER_INDEX] = 1
 
         if point_index == len(points) - 1:
             if is_last:
