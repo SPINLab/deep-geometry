@@ -8,7 +8,9 @@ Deep learning can use geospatial vector polygons directly (rather than a feature
 `pip install deep-geometry`
 
 ## Usage
-```python
+### Geometry vectorization
+Make a numerical vector from a geometry: 
+```
 >>> from deep_geometry import vectorizer as gv
 
 >>> geoms = [
@@ -21,8 +23,7 @@ Deep learning can use geospatial vector polygons directly (rather than a feature
 ...     'POLYGON((0 0, 1 0, 1 1, 0 1, 0 0))',
 ... ]
 
->>> # Just bake me some vectors
-... gv.vectorize_wkt(geoms[0])
+>>> gv.vectorize_wkt(geoms[0])
 array([[ 0.,  0.,  0.,  0.,  0.,  0.,  1.]])
 
 >>> gv.vectorize_wkt(geoms[6])
@@ -31,18 +32,35 @@ array([[ 0.,  0.,  0., 1., 1.,  0.,  0.],
        [ 1.,  1.,  0., 1., 1.,  0.,  0.],
        [ 0.,  1.,  0., 1., 1.,  0.,  0.],
        [ 0.,  0.,  0., 1., 0.,  0.,  1.]])
+```
 
->>> # collect the max length from a set of geometries:
-... max_len = gv.max_points(geoms)
-... print('Maximum geometry node size in set:', max_len)
+Collect the max length from a set of geometries:
+```
+>>> max_len = gv.get_max_points(geoms)
+>>> print('Maximum geometry node size in set:', max_len)
 Maximum geometry node size in set: 7
+```
 
->>> simple_polygon = gv.vectorize_wkt(geoms[6], max_len)
-... print('A polygon:', simple_polygon)
-A polygon: [[ 0.  0.  0.  1.  1.  0.  0.]
- [ 1.  0.  0.  1.  1.  0.  0.]
- [ 1.  1.  0.  1.  1.  0.  0.]
- [ 0.  1.  0.  1.  1.  0.  0.]
- [ 0.  0.  0.  1.  0.  0.  1.]]
+### Numerical data normalization
+Geometries regularly are in some kind of earth projection that is far from the origin of the coordinate system. In order for machine learning models to learn, data needs to be normalized. A usual way to go about this is to mean-center the instances and to divide by the dataset standard deviation.
+
+The library provides a convenience class for normalization, modeled after the scalers from [scikit-learn](https://scikit-learn.org/stable/modules/generated/sklearn.preprocessing.StandardScaler.html) with a .fit() and a .transform() method:
 
 ```
+>>> from deep_geometry import GeomScaler
+>>> import numpy
+>>> gs = GeomScaler()  # simply initialize
+>>> geom6 = gv.vectorize_wkt(geoms[6])
+>>> dataset = numpy.repeat([geom6], 4, axis=0)
+>>> gs.fit(dataset)
+>>> gs.scale_factor
+0.5
+>>> normalized_data = gs.transform(dataset)
+>>> normalized_data[0]  # see: zero-mean and scaled to standard deviation
+array([[-1., -1.,  0.,  1.,  1.,  0.,  0.],
+       [ 1., -1.,  0.,  1.,  1.,  0.,  0.],
+       [ 1.,  1.,  0.,  1.,  1.,  0.,  0.],
+       [-1.,  1.,  0.,  1.,  1.,  0.,  0.],
+       [-1., -1.,  0.,  1.,  0.,  0.,  1.]])
+
+``` 
